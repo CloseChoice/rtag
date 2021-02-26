@@ -4,14 +4,16 @@ pub mod rtag_sqlite;
 
 use rusqlite::Connection;
 
-use crate::rtag_sqlite::{create_db_and_initialize_tables, create_new_tag, insert_path, show_all, show_tags, show_paths, delete_by_id, delete_by_tag};
-use clap::{App, AppSettings, Arg, SubCommand};
+use crate::rtag_sqlite::{create_connection, Conn};
+use clap::{App, Arg, SubCommand};
 use std::fs;
-use std::path::Path;
 use std::path::PathBuf;
+use std::env;
 
 fn main() {
-    let conn = create_db_and_initialize_tables().unwrap();
+    let curr_path = env::current_exe().unwrap();
+    let curr_path_str = curr_path.to_str().unwrap();
+    let conn = create_connection(curr_path_str);
 
     let matches = App::new("rtag")
         .about("Revolutional tagging")
@@ -31,13 +33,6 @@ fn main() {
                         .help("The path to tag")
                         .required(true),
                 ),
-        )
-        .subcommand(
-            SubCommand::with_name("search").about("search in tags").arg(
-                Arg::with_name("pattern")
-                    .help("The remote repo to push things to")
-                    .required(true),
-            ),
         )
         .subcommand(
             SubCommand::with_name("create").about("create new tag").arg(
@@ -110,7 +105,6 @@ fn main() {
     // direct children are matched here.
     match matches.subcommand_name() {
         Some("tag") => println!("'rtag tag' was used"),
-        Some("search") => println!("'rtag search' was used"),
         Some("create") => println!("'rtag create' was used"),
         Some("show") => println!("'rtag show' was used"),
         Some("delete") => println!("'rtag delete' was used"),
@@ -128,7 +122,6 @@ fn main() {
     // `ArgMatches::subcommand` which returns a tuple of both the name and matches
     match matches.subcommand() {
         ("tag", Some(clone_matches)) => {
-            // Now we have a reference to clone's matches
             tag_path(
                 conn,
                 clone_matches.value_of("path"),
@@ -137,30 +130,29 @@ fn main() {
             println!("Tagging {}", clone_matches.value_of("path").unwrap());
         }
         ("search", Some(push_matches)) => {
-            // Now we have a reference to push's matches
             println!(
                 "Searching for {}",
                 push_matches.value_of("pattern").unwrap()
             );
         }
         ("create", Some(create_tag_matches)) => {
-            create_new_tag(&conn, create_tag_matches.value_of("tag").unwrap()).unwrap();
+            conn.create_new_tag(create_tag_matches.value_of("tag").unwrap()).unwrap();
             println!("Create tag {}", create_tag_matches.value_of("tag").unwrap());
         }
         ("show", Some(show_matches)) => {
             if show_matches.is_present("all") {
-            show_all(&conn);
+            conn.show_all();
             }
             else if show_matches.is_present("tags") {
                 let tag_vec: Vec<String> = show_matches.value_of("tags").unwrap().split(',').map(|c| "'".to_string() + c + "'").collect();
                 let tags = tag_vec.join(",");
-                show_tags(&conn, tags);
+                conn.show_tags(tags);
                 println!("tags is present. Value: {:?}", show_matches.value_of("tags").unwrap().split(',').collect::<Vec<&str>>());
             }
             else if show_matches.is_present("paths") {
                 let path_vec = show_matches.value_of("paths").unwrap().split(',').map(|w| String::from(w)).collect::<Vec<String>>();
                 println!("paths is present");
-                show_paths(&conn, path_vec);
+                conn.show_paths(path_vec);
             }
             else {
                 panic!("Didn't find anything in search which I can work with!!!")
@@ -172,27 +164,23 @@ fn main() {
                 println!("tags are present");
                 let tag_vec: Vec<String> = delete_matches.value_of("tags").unwrap().split(',').map(|c| "'".to_string() + c + "'").collect();
                 println!("these are the tags");
-                delete_by_tag(&conn, tag_vec);
+                conn.delete_by_tag(tag_vec);
             }
             if delete_matches.is_present("ids") {
                 let ids: String  = String::from(delete_matches.value_of("ids").unwrap());
-                delete_by_id(&conn, ids);
+                conn.delete_by_id(ids);
             }
         }
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
-
-    // create the sqlite db if not already present
-
-    // Continued program logic goes here...
 }
 
-fn tag_path(conn: Connection, path_as_str: Option<&str>, tag: Option<&str>) {
+fn tag_path(conn: Conn, path_as_str: Option<&str>, tag: Option<&str>) {
     let path = PathBuf::from(path_as_str.unwrap());
     match fs::canonicalize(&path) {
         Ok(path) => {
             println!("This will be saved to the db: {}", path.to_str().unwrap());
-            insert_path(&conn, path.to_str().unwrap(), tag.unwrap());
+            conn.insert_path(path.to_str().unwrap(), tag.unwrap());
         }
         Err(error) => panic!(
             "Couldn't find the path {}. Received error: {:?}",
@@ -201,5 +189,3 @@ fn tag_path(conn: Connection, path_as_str: Option<&str>, tag: Option<&str>) {
         ),
     }
 }
-
-fn save_to_sqlite() {}
