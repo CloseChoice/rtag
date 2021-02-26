@@ -1,0 +1,19 @@
+name: rtag
+version: "1.0"
+author: Kevin K. <kbknapp@gmail.com>
+about: Does awesome things
+args:
+    - tag:
+        short: tag
+        long: tag
+        help: let's you tag directories and files to reuse later on
+        takes_value: true
+    - search:
+        short: search
+        long: search
+        help: let's you search tags
+        takes_value: true
+    - verbose:
+        short: v
+        multiple: true
+        help: Sets the level of verbosity
