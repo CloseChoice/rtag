@@ -82,42 +82,6 @@ fn main() {
             )
         )
         .get_matches();
-
-    // At this point, the matches we have point to git. Keep this in mind...
-
-    // You can check if one of git's subcommands was used
-    if matches.is_present("tag") {
-        println!("'tag' was run.");
-    }
-
-    // You can see which subcommand was used
-    if let Some(subcommand) = matches.subcommand_name() {
-        println!("'rtag {}' was used", subcommand);
-
-        // It's important to note, this *only* check's git's DIRECT children, **NOT** it's
-        // grandchildren, great grandchildren, etc.
-        //
-        // i.e. if the command `git push remove --stuff foo` was run, the above will only print out,
-        // `git push` was used. We'd need to get push's matches to see further into the tree
-    }
-
-    // An alternative to checking the name is matching on known names. Again notice that only the
-    // direct children are matched here.
-    match matches.subcommand_name() {
-        Some("tag") => println!("'rtag tag' was used"),
-        Some("create") => println!("'rtag create' was used"),
-        Some("show") => println!("'rtag show' was used"),
-        Some("delete") => println!("'rtag delete' was used"),
-        None => println!("No subcommand was used"),
-        _ => unreachable!(), // Assuming you've listed all direct children above, this is unreachable
-    }
-
-    // You could get the independent subcommand matches, although this is less common
-    if let Some(clone_matches) = matches.subcommand_matches("tag") {
-        // Now we have a reference to clone's matches
-        println!("Tagging path: {}", clone_matches.value_of("path").unwrap());
-    }
-
     // The most common way to handle subcommands is via a combined approach using
     // `ArgMatches::subcommand` which returns a tuple of both the name and matches
     match matches.subcommand() {
