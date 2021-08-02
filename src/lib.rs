@@ -7,9 +7,10 @@ use core::fmt;
 use std::io;
 use uuid::{self, Uuid};
 use serde_json::Value as JsonValue;
+use prettytable::{Table, Row, Cell, row, cell};
+use std::path::{Path, PathBuf};
 
 use std::fs;
-use std::path::PathBuf;
 
 type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
@@ -30,11 +31,25 @@ pub struct GraphConn {
     pub trans: RocksdbTransaction,
 }
 
+pub fn create_new_conn(path_name: &str) -> GraphConn {
+    let db = RocksdbDatastore::new(path_name, Some(1), false).unwrap();
+    let trans = db.transaction().unwrap();
+    GraphConn {
+        trans: trans,
+    }
+}
+
+
 impl GraphConn {
     /// create a new vertex of type "tag_type" with the property "tag_name" which gets the value 
     /// <name>
+
     pub fn create_tag(&self, tag_type: &Type, name: &String) -> Result<uuid::Uuid> {
         self.create_vertex_with_property(tag_type, &String::from(Vtype::Tagname.to_string()), name)
+    }
+
+    pub fn find_tag(&self, name: &String) -> Result<Vec<uuid::Uuid>> {
+        Ok(self.find_vertices_with_property_value(&String::from(Vtype::Tagname.to_string()), name))
     }
 
     pub fn create_vertex_with_property(&self, v_type: &Type, property: &String, property_value: &String) -> Result<uuid::Uuid> {
@@ -107,5 +122,58 @@ impl GraphConn {
         let v = self.find_vertices_with_property_value(property, property_value);
         self.trans.delete_vertices(SpecificVertexQuery::new(v))?;
         Ok(())
+    }
+
+    pub fn show_tags(&self, tags: Vec<String>) {
+        let mut table = Table::new();
+        table.add_row(Row::from(&["TAG"]));
+        for tag in tags.iter() {
+            let t = self.find_tag(tag).unwrap();
+
+            if t.len() == 1 {
+                let props = self.trans.get_all_vertex_properties(SpecificVertexQuery::new(t)).unwrap();
+                for prop in props.iter() {
+                    let val = &prop.props[0];
+                    table.add_row(row![val.value]);
+                }
+            }
+        }
+        table.printstd();
+    }
+
+    /// Find 
+    fn find_by_hops(&self, num_hops: usize, vtype: Vtype, property_val: String) {
+        let v = self.find_vertices_with_property_value(&String::from(vtype.to_string()), &property_val);
+        if v.len() == 1 {
+            let mut q = SpecificVertexQuery::single(v[0]);
+            let s = q.inbound(u32::max_value()).outbound(u32::max_value());
+            for _ in 0..num_hops - 1 {
+                let s = s.clone().inbound(u32::max_value()).outbound(u32::max_value());
+            let props = self.trans.get_all_vertex_properties(s).unwrap();
+            }
+        }
+        match v.len() {
+            0 => println!("You supplied the property value {} which can't be found in the database", property_val),
+            1 => println!("this is random shit"),
+            _ => println!("This is something different"),
+        }
+    }
+    //todo: write this function
+    pub fn show_tags_and_associated_items(&self, tags: Vec<String>, items: Vec<String>) {
+        let mut table = Table::new();
+        table.add_row(Row::from(&["TAG", "ITEM", "ITEM_TYPE"]));
+        for tag in tags.iter() {
+            let t = self.find_tag(tag).unwrap();
+
+            if t.len() == 1 {
+                let props = self.trans.get_all_vertex_properties(SpecificVertexQuery::new(t)).unwrap();
+                println!("THESE ARE PROPS {:?}", props);
+                for prop in props.iter() {
+                    let val = &prop.props[0];
+                    table.add_row(row![val.value]);
+                }
+            }
+        }
+        table.printstd();
     }
 }

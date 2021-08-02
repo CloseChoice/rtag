@@ -190,6 +190,52 @@ mod tests {
         let _ = gconn.delete_vertices_with_property_value(&p, &p_val);
         assert_eq!(gconn.trans.get_vertices(RangeVertexQuery::new(u32::max_value())).unwrap().len(), 0);
     }
+    
+    #[test]
+    fn test_find_tag() {
+        let gconn = create_new_db_trans();
+        const tag_name: &str = "dummy_tag_name";
+        const tag_name2: &str = "other_dummy_tag_name";
+        const tag_type: &str = "dummy_type";
+        let gconn = create_new_db_trans();
+        let tag_v = gconn.create_tag(&Type::new(tag_type).unwrap(), &String::from(tag_name));
+        let tag_v = gconn.create_tag(&Type::new(tag_type).unwrap(), &String::from(tag_name2));
+
+        assert_eq!(gconn.find_tag(&String::from(tag_name)).unwrap().len(), 1)
+    }
+
+    #[test]
+    fn test_show_tags() {
+        const DUMMY_TYPE: &str = "dummy_type";
+        let gconn = create_new_db_trans();
+        let t_type = Type::new(DUMMY_TYPE).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag1"), String::from("tests/fixtures/paper1")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag2"), String::from("tests/fixtures/paper2")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag3"), String::from("tests/fixtures/paper3")).unwrap();
+
+        let mut tag_v = Vec::new();
+        tag_v.push(String::from("tag1"));
+        tag_v.push(String::from("tag2"));
+
+        gconn.show_tags(tag_v);
+    }
+
+    #[test]
+    fn test_show_tags_and_associated_items() {
+        const DUMMY_TYPE: &str = "dummy_type";
+        let gconn = create_new_db_trans();
+        let t_type = Type::new(DUMMY_TYPE).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag1"), String::from("tests/fixtures/paper1")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag2"), String::from("tests/fixtures/paper2")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag3"), String::from("tests/fixtures/paper3")).unwrap();
+
+        let mut tag_v = [String::from("tag1"), String::from("tag2")].to_vec();
+        let mut items = [String::from("item1"), String::from("item2")].to_vec();
+        //tag_v.push(String::from("tag1"));
+        //tag_v.push(String::from("tag2"));
+
+        gconn.show_tags_and_associated_items(tag_v, items);
+    }
 }
 
 
