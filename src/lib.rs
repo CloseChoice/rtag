@@ -1,7 +1,7 @@
 
 use indradb::{
     BulkInsertItem, Datastore, EdgeKey, EdgeQueryExt, RangeVertexQuery, RocksdbDatastore,
-    RocksdbTransaction, SpecificVertexQuery, Transaction, Type, Vertex, VertexPropertyQuery, VertexQuery, VertexQueryExt, Edge, Error
+    RocksdbTransaction, SpecificVertexQuery, Transaction, Type, Vertex, VertexPropertyQuery, VertexQuery, VertexQueryExt, Edge, Error, EdgeDirection
 };
 use core::fmt;
 use std::io;
@@ -9,12 +9,15 @@ use uuid::{self, Uuid};
 use serde_json::Value as JsonValue;
 use prettytable::{Table, Row, Cell, row, cell};
 use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 
+pub mod structs;
+use structs::Tag;
 use std::fs;
 
 type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
-enum Vtype {
+pub enum Vtype {
     Edgetype,
     Tagname,
     Path,
@@ -32,7 +35,7 @@ pub struct GraphConn {
 }
 
 pub fn create_new_conn(path_name: &str) -> GraphConn {
-    let db = RocksdbDatastore::new(path_name, Some(1), false).unwrap();
+    let db = RocksdbDatastore::new(path_name, Some(1)).unwrap();
     let trans = db.transaction().unwrap();
     GraphConn {
         trans: trans,
@@ -63,7 +66,7 @@ impl GraphConn {
     }
 
     pub fn find_vertices_with_property_value(&self, property: &String, property_value: &String) -> Vec<uuid::Uuid> {
-        let query_v = VertexQuery::Range(RangeVertexQuery::new(u32::max_value()));
+        let query_v = VertexQuery::Range(RangeVertexQuery::new());
         let _prop = property.clone();
         let vertices = self.trans.get_vertex_properties(VertexPropertyQuery::new(query_v, property)).unwrap();
         // println!("these are the vertices with given property {} and property_value {}: {:?}", prop, property_value, vertices);
@@ -107,15 +110,15 @@ impl GraphConn {
     }
 
     pub fn find_edges_between_vertices(&self, inbound_v: Uuid, outbound_v: Uuid) -> usize {
-        let inbound_v_edges = self.trans.get_edges(SpecificVertexQuery::single(inbound_v).inbound(u32::max_value()));
-        let outbound_v_edges = self.trans.get_edges(SpecificVertexQuery::single(outbound_v).outbound(u32::max_value()));
+        let inbound_v_edges = self.trans.get_edges(SpecificVertexQuery::single(inbound_v).inbound());
+        let outbound_v_edges = self.trans.get_edges(SpecificVertexQuery::single(outbound_v).outbound());
         let ive = inbound_v_edges.unwrap_or_default();
         let ove = outbound_v_edges.unwrap_or_default();
         ive.into_iter().filter(|v| ove.contains(v)).count()
     }
 
     pub fn get_edges_of_vertices(&self, vec: Vec<Uuid>) -> Vec<Edge> {
-        self.trans.get_edges(SpecificVertexQuery::new(vec).inbound(u32::max_value())).unwrap()
+        self.trans.get_edges(SpecificVertexQuery::new(vec).inbound()).unwrap()
     }
 
     pub fn delete_vertices_with_property_value(&self, property: &String, property_value: &String) -> Result<()> {
@@ -141,15 +144,33 @@ impl GraphConn {
         table.printstd();
     }
 
-    /// Find 
-    fn find_by_hops(&self, num_hops: usize, vtype: Vtype, property_val: String) {
+    /// Find in a given range of hops
+    // todo: do I really want that?
+    pub fn find_by_hops(&self, num_hops: usize, vtype: Vtype, property_val: String) {
         let v = self.find_vertices_with_property_value(&String::from(vtype.to_string()), &property_val);
+        let hash: HashMap<String, String> = HashMap::new();
+        println!("Found ids with the property {:?}", v);
         if v.len() == 1 {
-            let mut q = SpecificVertexQuery::single(v[0]);
-            let s = q.inbound(u32::max_value()).outbound(u32::max_value());
-            for _ in 0..num_hops - 1 {
-                let s = s.clone().inbound(u32::max_value()).outbound(u32::max_value());
-            let props = self.trans.get_all_vertex_properties(s).unwrap();
+            let q = SpecificVertexQuery::single(v[0]);
+            println!("\nFound q {:?}", self.trans.get_all_vertex_properties(q.clone()).unwrap());
+
+            let num_edges_outbound = self.trans.get_edge_count(q.ids[0], None, EdgeDirection::Outbound).unwrap();
+            let num_edges_inbound = self.trans.get_edge_count(q.ids[0], None, EdgeDirection::Inbound).unwrap();
+            println!("These are the inbound and outbound types {:?}, {:?}", num_edges_inbound, num_edges_outbound);
+            let s = q.outbound().outbound();
+            println!("\nFound VERTEX PROP the property {:?}", self.trans.get_all_vertex_properties(s.clone()).unwrap());
+            for num_hop in 0..num_hops  {
+                let s = s.clone().outbound().inbound().inbound().outbound();
+                let props = self.trans.get_all_vertex_properties(s).unwrap();
+                let t: Vec<&String> = props.iter().filter_map(|p| match &p.props[0].value {
+                    JsonValue::String(s) => Some(s),
+                    _ => None,
+                }
+                ).collect();
+                println!("This is t {:?}", t);
+                //d = props.iter().map(|v| v.value).collect::<Vec<String>>();
+                //println!("\nTHIS IS D {:?} ", props, num_hop);
+                println!("\nTHESE ARE PROPS {:?} in hops {:?}", props, num_hop);
             }
         }
         match v.len() {
@@ -159,6 +180,7 @@ impl GraphConn {
         }
     }
     //todo: write this function
+    //todo: find out what I wanted to do here
     pub fn show_tags_and_associated_items(&self, tags: Vec<String>, items: Vec<String>) {
         let mut table = Table::new();
         table.add_row(Row::from(&["TAG", "ITEM", "ITEM_TYPE"]));

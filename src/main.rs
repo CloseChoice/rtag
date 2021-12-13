@@ -1,6 +1,7 @@
 #[macro_use] extern crate prettytable;
 extern crate clap;
 pub mod rtag_sqlite;
+pub mod structs;
 
 use rusqlite::Connection;
 use rtag::{create_new_conn, GraphConn};

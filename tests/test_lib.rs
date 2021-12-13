@@ -1,15 +1,15 @@
 // static transaction: MemoryDatastore = MemoryDatastore::create("test.db");
 
-mod tests {
+pub(crate) mod tests {
     use std::path::Path;
     use std::fs;
 
     use indradb::{BulkInsertItem, Datastore, EdgeKey, EdgeQuery, EdgeQueryExt, PipeEdgeQuery, PipeVertexQuery, RangeVertexQuery, RocksdbDatastore, RocksdbTransaction, SpecificEdgeQuery, SpecificVertexQuery, Transaction, Type, Vertex, VertexProperty, VertexPropertyQuery, VertexQuery, VertexQueryExt, EdgeDirection};
 
-    use rtag::{GraphConn};
+    use rtag::{GraphConn, Vtype};
     use uuid::Uuid;
 
-    fn create_new_db() -> RocksdbDatastore {
+    pub fn create_new_db() -> RocksdbDatastore {
         let path_name = Uuid::new_v4().to_string();
         let mut p = String::from("tests/test_rocks.db/");
         p.push_str(&path_name.as_str());
@@ -17,11 +17,11 @@ mod tests {
         if path.exists() {
             fs::remove_dir_all(path).unwrap();
         }
-        RocksdbDatastore::new(path.to_str().unwrap(), Some(1), false).unwrap()
+        RocksdbDatastore::new(path.to_str().unwrap(), Some(1)).unwrap()
 
     }
 
-    fn create_new_db_trans() -> GraphConn {
+    pub fn create_new_db_trans() -> GraphConn {
         let db = create_new_db();
         let trans = db.transaction().unwrap();
         GraphConn {
@@ -37,7 +37,7 @@ mod tests {
         let tag_v = gconn.create_tag(&Type::new(tag_type).unwrap(), &String::from(tag_name));
 
         let range = gconn.trans
-            .get_vertices(RangeVertexQuery::new(u32::max_value()))
+            .get_vertices(RangeVertexQuery::new())
             .unwrap();
         assert_eq!(tag_v.unwrap(), range[0].id);
         assert_eq!(range.len(), 1);
@@ -57,7 +57,7 @@ mod tests {
         gconn.tag_path_or_http( Some(&Type::new(tag_type).unwrap()), String::from(tag_name), String::from(path_or_http)).unwrap();
 
         let range = gconn.trans
-            .get_vertices(RangeVertexQuery::new(u32::max_value()))
+            .get_vertices(RangeVertexQuery::new())
             .unwrap();
         assert_eq!(range.len(), 2);
     }
@@ -72,8 +72,9 @@ mod tests {
         gconn.tag_path_or_http( Some(&Type::new(tag_type).unwrap()), String::from(tag_name), String::from(path_or_http)).unwrap();
 
         let range = gconn.trans
-            .get_vertices(RangeVertexQuery::new(u32::max_value()))
+            .get_vertices(RangeVertexQuery::new())
             .unwrap();
+        println!("These are the vertices {:?}", range);
         assert_eq!(range.len(), 2);
     }
 
@@ -96,7 +97,7 @@ mod tests {
         let prop= String::from("tag_name");
         let prop_val = String::from("tag1");
         let v = gconn.find_vertex_or_create(&t, &prop_val, &prop);
-        let q = gconn.trans.get_vertices(VertexQuery::Range(RangeVertexQuery::new(u32::max_value()))).unwrap();
+        let q = gconn.trans.get_vertices(VertexQuery::Range(RangeVertexQuery::new())).unwrap();
         assert_eq!(q.len(), 1);
 
         let found_v = gconn.find_vertices_with_property_value(&prop, &prop_val);
@@ -112,7 +113,7 @@ mod tests {
         let prop_val = String::from("tag1");
         let v_created = gconn.create_vertex_with_property(&t, &prop, &prop_val);
         let v_found = gconn.find_vertex_or_create(&t, &prop_val, &prop);
-        let q = gconn.trans.get_vertices(VertexQuery::Range(RangeVertexQuery::new(u32::max_value()))).unwrap();
+        let q = gconn.trans.get_vertices(VertexQuery::Range(RangeVertexQuery::new())).unwrap();
         assert_eq!(q.len(), 1);
 
         assert_eq!(v_created.unwrap(), v_found.unwrap());
@@ -159,7 +160,7 @@ mod tests {
         // run this a second a time
         gconn.tag_path_or_http(Some(&t_type), String::from("tag3"), String::from("tests/fixtures/paper3")).unwrap();
 
-        assert_eq!(gconn.trans.get_vertices(RangeVertexQuery::new(u32::max_value())).unwrap().len(), 6);
+        assert_eq!(gconn.trans.get_vertices(RangeVertexQuery::new()).unwrap().len(), 6);
 
         assert_eq!(gconn.trans.get_edge_count(t1, None, EdgeDirection::Outbound).unwrap(), 2);
         assert_eq!(gconn.trans.get_edge_count(t2, None, EdgeDirection::Outbound).unwrap(), 2);
@@ -186,9 +187,9 @@ mod tests {
         let p = String::from("prop1");
         let p_val = String::from("prop_val1");
         gconn.create_vertex_with_property(&t, &p, &p_val).unwrap();
-        assert_eq!(gconn.trans.get_vertices(RangeVertexQuery::new(u32::max_value())).unwrap().len(), 1);
+        assert_eq!(gconn.trans.get_vertices(RangeVertexQuery::new()).unwrap().len(), 1);
         let _ = gconn.delete_vertices_with_property_value(&p, &p_val);
-        assert_eq!(gconn.trans.get_vertices(RangeVertexQuery::new(u32::max_value())).unwrap().len(), 0);
+        assert_eq!(gconn.trans.get_vertices(RangeVertexQuery::new()).unwrap().len(), 0);
     }
     
     #[test]
@@ -206,6 +207,7 @@ mod tests {
 
     #[test]
     fn test_show_tags() {
+        // we don't test anything here
         const DUMMY_TYPE: &str = "dummy_type";
         let gconn = create_new_db_trans();
         let t_type = Type::new(DUMMY_TYPE).unwrap();
@@ -236,6 +238,36 @@ mod tests {
 
         gconn.show_tags_and_associated_items(tag_v, items);
     }
+
+
+    #[test]
+    fn test_find_by_hops() {
+        const DUMMY_TYPE: &str = "dummy_type";
+        let gconn = create_new_db_trans();
+        let t_type = Type::new(DUMMY_TYPE).unwrap();
+        let vtype = Vtype::Tagname;
+        let t1 = gconn.create_tag( &t_type, &String::from("tag1")).unwrap();
+        let t2 = gconn.create_tag( &t_type, &String::from("tag2")).unwrap();
+        let t3 = gconn.create_tag( &t_type, &String::from("tag3")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag1"), String::from("tests/fixtures/paper1")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag1"), String::from("tests/fixtures/paper2")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag2"), String::from("tests/fixtures/paper2")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag2"), String::from("tests/fixtures/paper3")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag3"), String::from("tests/fixtures/paper3")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag3"), String::from("tests/fixtures/paper4")).unwrap();
+        gconn.tag_path_or_http( Some(&t_type), String::from("tag4"), String::from("tests/fixtures/paper4")).unwrap();
+        // run this a second a time
+        gconn.tag_path_or_http(Some(&t_type), String::from("ML"), String::from("tests/fixtures/paper3")).unwrap();
+        gconn.tag_path_or_http(Some(&t_type), String::from("other stuff"), String::from("tests/fixtures/paper3")).unwrap();
+        let num_edges_outbound = gconn.trans.get_edge_count(t3.clone(), None, EdgeDirection::Outbound).unwrap();
+        let num_edges_inbound = gconn.trans.get_edge_count(t3.clone(), None, EdgeDirection::Inbound).unwrap();
+        println!("This is the number of outbound edges {:?}", num_edges_outbound);
+        println!("This is the number of inbound edges {:?}", num_edges_inbound);
+
+        gconn.find_by_hops(2, vtype, String::from("tag3"));
+    }
 }
+
+// TODO: create struct for Tag with fields: name, inbound connection, outbound connection
 
 
